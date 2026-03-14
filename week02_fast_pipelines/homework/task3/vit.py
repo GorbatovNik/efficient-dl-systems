@@ -14,7 +14,7 @@ def pair(t):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim=255, dropout=0.0):
+    def __init__(self, dim, hidden_dim=256, dropout=0.0):
         super().__init__()
         self.net = nn.Sequential(
             nn.LayerNorm(dim),
@@ -92,7 +92,7 @@ class ViT(nn.Module):
         num_classes,
         depth,
         heads,
-        dim=255,
+        dim=256,
         pool="cls",
         channels=3,
         dim_head=64,

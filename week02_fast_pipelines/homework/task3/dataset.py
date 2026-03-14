@@ -52,7 +52,6 @@ def get_train_transforms() -> tp.Any:
     return transforms.Compose(
         [
             transforms.Resize((320, 320)),
-            transforms.CenterCrop(224),
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.AugMix(),
