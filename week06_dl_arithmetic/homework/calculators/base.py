@@ -23,12 +23,12 @@ H100_SXM = GPUSpec(
     interconnect_bandwidth_gbps=400,
 )
 
-# Put your GPU spec here
+# A800 SXM 80GB (Ampere GA100, China variant of A100)
 GPUS_SPEC = GPUSpec(
-    name="...", 
-    memory_bandwidth_gbps=...,
-    flops_bf16=...,
-    interconnect_bandwidth_gbps=...,
+    name="A800 SXM 80GB",
+    memory_bandwidth_gbps=2000,
+    flops_bf16=312,
+    interconnect_bandwidth_gbps=400,
 )
 
 

@@ -1,15 +1,11 @@
 """
-Training Script with DDP
-
-Training inefficiencies:
-1. DDP instead of FSDP
-2. Non-fused optimizer
+Training Script with FSDP
 
 Usage:
     # Single GPU
     python efficient_train.py
 
-    # Multi-GPU with DDP
+    # Multi-GPU with FSDP
     torchrun --nproc_per_node=2 efficient_train.py
 """
 
@@ -20,7 +16,7 @@ from contextlib import nullcontext
 
 import torch
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed._composable.fsdp import fully_shard
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 
 from config import TransformerConfig
@@ -29,11 +25,6 @@ from efficient_optimizer.ademamix import AdEMAMix
 
 
 class SyntheticDataset(Dataset):
-    """
-    Synthetic dataset generating random token sequences.
-    Used for benchmarking.
-    """
-
     def __init__(
         self,
         num_samples: int,
@@ -58,7 +49,6 @@ class SyntheticDataset(Dataset):
 
 
 def setup_distributed():
-    """Initialize distributed training if available."""
     if 'RANK' in os.environ:
         dist.init_process_group(backend='nccl')
         rank = dist.get_rank()
@@ -71,13 +61,11 @@ def setup_distributed():
 
 
 def cleanup_distributed():
-    """Clean up distributed training."""
     if dist.is_initialized():
         dist.destroy_process_group()
 
 
 def get_lr(step: int, warmup_steps: int, max_lr: float, total_steps: int) -> float:
-    """Linear warmup followed by cosine decay."""
     if step < warmup_steps:
         return max_lr * step / warmup_steps
 
@@ -104,9 +92,10 @@ def train(args):
 
     model = EfficientTransformer(config).to(device)
 
-    # TODO: Replace DDP with FSDP
     if world_size > 1:
-        model = DDP(model, device_ids=[local_rank])
+        for layer in model.layers:
+            fully_shard(layer)
+        fully_shard(model)
 
     num_params = sum(p.numel() for p in model.parameters())
     if is_master:
@@ -148,7 +137,6 @@ def train(args):
         print(f"Sequence length: {config.max_seq_len}")
         print("-" * 60)
 
-    scaler = torch.amp.GradScaler('cuda', enabled=args.use_amp)
     autocast_ctx = torch.amp.autocast('cuda', dtype=torch.bfloat16) if args.use_amp else nullcontext()
 
     model.train()
@@ -178,14 +166,12 @@ def train(args):
             with autocast_ctx:
                 loss = model(input_ids, labels=labels)
 
-            scaler.scale(loss).backward()
+            loss.backward()
 
             if args.grad_clip > 0:
-                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
 
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
 
             batch_tokens = input_ids.numel() * world_size
             total_tokens += batch_tokens
@@ -222,7 +208,7 @@ def train(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Baseline Transformer Training')
+    parser = argparse.ArgumentParser(description='Efficient Transformer Training')
 
     parser.add_argument('--batch-size', type=int, default=4,
                         help='Batch size per GPU')
